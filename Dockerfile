@@ -5,4 +5,5 @@ WORKDIR /usr/src/app
 COPY . .
 RUN cargo build --release
 
-ENTRYPOINT while true; do cargo run --release; done
+EXPOSE 8088
+ENTRYPOINT cargo run --release

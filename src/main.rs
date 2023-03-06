@@ -39,7 +39,7 @@ async fn handle_smtp(msg: &str) -> &'static [u8] {
 async fn main() -> Result<(), Box<dyn Error>> {
     let addr = env::args()
         .nth(1)
-        .unwrap_or_else(|| ":::8088".to_string());
+        .unwrap_or_else(|| "localhost:8088".to_string());
 
     let listener = TcpListener::bind(&addr).await?;
     println!("Listening on: {}", addr);
