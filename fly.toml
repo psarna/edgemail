@@ -15,7 +15,7 @@ processes = []
   protocol = "tcp"
 
   [[services.ports]]
-    port = 587
+    port = "80"
 
   [[services.tcp_checks]]
     grace_period = "1s"
