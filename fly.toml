@@ -13,6 +13,7 @@ processes = []
 [[services]]
   internal_port = 8080
   protocol = "tcp"
+  processes = ["eatmail"]
 
   [[services.ports]]
     port = "80"
