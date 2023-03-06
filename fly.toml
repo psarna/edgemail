@@ -8,6 +8,7 @@ processes = []
 [env]
 
 [experimental]
+  allowed_public_ports = [587]
   auto_rollback = true
 
 [[services]]
