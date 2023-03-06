@@ -11,7 +11,7 @@ processes = []
   auto_rollback = true
 
 [[services]]
-  internal_port = 8088
+  internal_port = 8080
   protocol = "tcp"
 
   [[services.ports]]
