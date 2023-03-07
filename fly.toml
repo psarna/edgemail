@@ -1,4 +1,4 @@
-# fly.toml file generated for eatmail on 2023-03-06T15:11:24+01:00
+# fly.toml file generated for eatmail on 2023-03-07T09:24:52+01:00
 
 app = "eatmail"
 kill_signal = "SIGINT"
@@ -11,27 +11,25 @@ processes = []
   auto_rollback = true
 
 [[services]]
-  http_checks = []
   internal_port = 8080
   protocol = "tcp"
-  script_checks = []
-  processes = ["eatmail"]
-  [services.concurrency]
-    hard_limit = 25
-    soft_limit = 20
-    type = "connections"
 
   [[services.ports]]
-    handlers = ["http"]
-    port = 80
+    port = 25
 
   [[services.ports]]
-    handlers = ["tls", "http"]
-    port = 443
+    port = 465
 
+  [[services.ports]]
+    handlers = ["tls"]
+    port = 587
+
+  [[services.ports]]
+    handlers = ["tls"]
+    port = 2525
 
   [[services.tcp_checks]]
     grace_period = "1s"
     interval = "15s"
-    restart_limit = 0 
+    restart_limit = 0
     timeout = "2s"
