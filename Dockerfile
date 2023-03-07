@@ -6,4 +6,4 @@ COPY . .
 RUN cargo build --release
 
 EXPOSE 8080
-ENTRYPOINT ./target/release/eatmail
+ENTRYPOINT while true; do ./target/release/eatmail; done
