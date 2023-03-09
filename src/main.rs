@@ -70,7 +70,7 @@ impl SmtpServer {
     }
 
     async fn handle_smtp(&mut self, raw_msg: &str) -> Result<&'static [u8]> {
-        tracing::trace!("Received {raw_msg}");
+        tracing::trace!("Received {raw_msg} in state {:?}", self.state);
         let mut msg = raw_msg.split_whitespace();
         let command = msg
             .next()
