@@ -124,7 +124,7 @@ impl SmtpServer {
                 Ok(SmtpServer::KTHXBYE)
             }
             (_, SmtpState::ReceivingData(mut mail)) => {
-                let raw_msg = raw_msg.replace('\x0a', r"\n").replace(|c: char| !c.is_ascii_graphic(), "");
+                let raw_msg = raw_msg.escape_default().to_string();
                 mail.data += &raw_msg;
                 self.state = SmtpState::ReceivingData(mail);
                 Ok(SmtpServer::KK)
