@@ -2,6 +2,7 @@
 name = "eatmail"
 version = "0.1.1"
 edition = "2018"
+license = "MIT OR Apache-2.0"
 keywords = ["email", "smtp", "mail", "server", "spam"]
 repository = "https://github.com/psarna/eatmail"
 
