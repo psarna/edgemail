@@ -74,9 +74,10 @@ impl SmtpServer {
         let mut msg = raw_msg.split_whitespace();
         let command = msg
             .next()
-            .ok_or(anyhow::anyhow!("received empty command"))?;
+            .ok_or(anyhow::anyhow!("received empty command"))?
+            .to_lowercase();
         let state = std::mem::replace(&mut self.state, SmtpState::Fresh);
-        match (command, state) {
+        match (command.as_str(), state) {
             ("ehlo", SmtpState::Fresh) | ("helo", SmtpState::Fresh) => {
                 self.state = SmtpState::Greeted;
                 Ok(SmtpServer::KK)
@@ -128,7 +129,10 @@ impl SmtpServer {
                 self.state = SmtpState::ReceivingData(mail);
                 Ok(SmtpServer::KK)
             }
-            _ => Err(anyhow::anyhow!("Unexpected message received in state {:?}: {raw_msg}", self.state)),
+            _ => Err(anyhow::anyhow!(
+                "Unexpected message received in state {:?}: {raw_msg}",
+                self.state
+            )),
         }
     }
 
