@@ -30,6 +30,7 @@ struct SmtpServer {
 
 impl SmtpServer {
     const HAI: &[u8] = b"220 eatmail\n";
+    const NOPE: &[u8] = b"500\n";
     const KK: &[u8] = b"250\n";
     const SEND_DATA_PLZ: &[u8] = b"354\n";
     const KTHXBYE: &[u8] = b"221\n";
@@ -78,7 +79,11 @@ impl SmtpServer {
             .to_lowercase();
         let state = std::mem::replace(&mut self.state, SmtpState::Fresh);
         match (command.as_str(), state) {
-            ("ehlo", SmtpState::Fresh) | ("helo", SmtpState::Fresh) => {
+            ("ehlo", SmtpState::Fresh) => {
+                tracing::debug!("Refusing EHLO, waiting for HELO instead");
+                Ok(SmtpServer::NOPE)
+            }
+            ("helo", SmtpState::Fresh) => {
                 self.state = SmtpState::Greeted;
                 Ok(SmtpServer::KK)
             }
