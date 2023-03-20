@@ -35,6 +35,7 @@ impl SmtpServer {
     const AUTH_KK: &[u8] = b"235 Ok\n";
     const SEND_DATA_PLZ: &[u8] = b"354 End data with <CR><LF>.<CR><LF>\n";
     const KTHXBYE: &[u8] = b"221 Bye\n";
+    const HOLD_YOUR_HORSES: &[u8] = &[];
 
     fn new(stream: tokio::net::TcpStream) -> Result<Self> {
         Ok(Self {
@@ -63,7 +64,10 @@ impl SmtpServer {
             }
             let msg = std::str::from_utf8(&buf[0..n])?;
             let response = self.handle_smtp(msg).await?;
-            self.stream.write_all(response).await?;
+            if response != SmtpServer::HOLD_YOUR_HORSES {
+                tracing::debug!("Not responding, awaiting more data");
+                self.stream.write_all(response).await?;
+            }
             if response == SmtpServer::KTHXBYE {
                 break;
             }
@@ -132,9 +136,14 @@ impl SmtpServer {
                 Ok(SmtpServer::KTHXBYE)
             }
             (_, SmtpState::ReceivingData(mut mail)) => {
+                let resp = if raw_msg.ends_with("\r\n.\r\n") {
+                    SmtpServer::KK
+                } else {
+                    SmtpServer::HOLD_YOUR_HORSES
+                };
                 mail.data += raw_msg;
                 self.state = SmtpState::ReceivingData(mail);
-                Ok(SmtpServer::KK)
+                Ok(resp)
             }
             _ => Err(anyhow::anyhow!(
                 "Unexpected message received in state {:?}: {raw_msg}",
