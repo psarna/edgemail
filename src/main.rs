@@ -30,11 +30,11 @@ struct SmtpServer {
 
 impl SmtpServer {
     const HAI: &[u8] = b"220 eatmail\n";
-    const KK: &[u8] = b"250\n";
+    const KK: &[u8] = b"250 Ok\n";
     const KK_AUTH: &[u8] = b"250-smtp.idont.date Hello idont.date\n250 AUTH PLAIN LOGIN\n";
-    const AUTH_KK: &[u8] = b"235\n";
-    const SEND_DATA_PLZ: &[u8] = b"354\n";
-    const KTHXBYE: &[u8] = b"221\n";
+    const AUTH_KK: &[u8] = b"235 Ok\n";
+    const SEND_DATA_PLZ: &[u8] = b"354 End data with <CR><LF>.<CR><LF>\n";
+    const KTHXBYE: &[u8] = b"221 Bye\n";
 
     fn new(stream: tokio::net::TcpStream) -> Result<Self> {
         Ok(Self {
