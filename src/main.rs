@@ -82,6 +82,7 @@ impl SmtpServer {
         match (command.as_str(), state) {
             ("ehlo", SmtpState::Fresh) => {
                 tracing::debug!("Sending AUTH info");
+                self.state = SmtpState::Greeted;
                 Ok(SmtpServer::KK_AUTH)
             }
             ("helo", SmtpState::Fresh) => {
