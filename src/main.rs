@@ -82,6 +82,7 @@ impl SmtpServer {
                 self.state = SmtpState::Greeted;
                 Ok(SmtpServer::KK)
             }
+            ("auth", _) => Ok(SmtpServer::KK),
             ("mail", SmtpState::Greeted) => {
                 let from = msg.next().ok_or(anyhow::anyhow!("received empty MAIL"))?;
                 let from = from
