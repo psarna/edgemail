@@ -30,8 +30,9 @@ struct SmtpServer {
 
 impl SmtpServer {
     const HAI: &[u8] = b"220 eatmail\n";
-    const NOPE: &[u8] = b"500\n";
     const KK: &[u8] = b"250\n";
+    const KK_AUTH: &[u8] = b"250-smtp.idont.date Hello idont.date\n250 AUTH PLAIN LOGIN\n";
+    const AUTH_KK: &[u8] = b"235\n";
     const SEND_DATA_PLZ: &[u8] = b"354\n";
     const KTHXBYE: &[u8] = b"221\n";
 
@@ -80,14 +81,14 @@ impl SmtpServer {
         let state = std::mem::replace(&mut self.state, SmtpState::Fresh);
         match (command.as_str(), state) {
             ("ehlo", SmtpState::Fresh) => {
-                tracing::debug!("Refusing EHLO, waiting for HELO instead");
-                Ok(SmtpServer::NOPE)
+                tracing::debug!("Sending AUTH info");
+                Ok(SmtpServer::KK_AUTH)
             }
             ("helo", SmtpState::Fresh) => {
                 self.state = SmtpState::Greeted;
                 Ok(SmtpServer::KK)
             }
-            ("auth", _) => Ok(SmtpServer::KK),
+            ("auth", _) => Ok(SmtpServer::AUTH_KK),
             ("mail", SmtpState::Greeted) => {
                 let from = msg.next().ok_or(anyhow::anyhow!("received empty MAIL"))?;
                 let from = from
