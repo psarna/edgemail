@@ -60,6 +60,7 @@ impl SmtpServer {
 
             if n == 0 {
                 tracing::info!("Received EOF");
+                self.handle_smtp("quit").await.ok();
                 break;
             }
             let msg = std::str::from_utf8(&buf[0..n])?;
