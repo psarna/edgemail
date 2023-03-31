@@ -2,7 +2,7 @@ use anyhow::Result;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 
-use libsql_client::{reqwest::Connection as DbConnection, Connection, Statement};
+use libsql_client::{client::GenericClient, DatabaseClient, Statement};
 
 use std::env;
 use std::error::Error;
@@ -25,7 +25,7 @@ enum SmtpState {
 struct SmtpServer {
     stream: tokio::net::TcpStream,
     state: SmtpState,
-    db: DbConnection,
+    db: GenericClient,
 }
 
 impl SmtpServer {
@@ -37,11 +37,11 @@ impl SmtpServer {
     const KTHXBYE: &[u8] = b"221 Bye\n";
     const HOLD_YOUR_HORSES: &[u8] = &[];
 
-    fn new(stream: tokio::net::TcpStream) -> Result<Self> {
+    async fn new(stream: tokio::net::TcpStream) -> Result<Self> {
         Ok(Self {
             stream,
             state: SmtpState::Fresh,
-            db: DbConnection::connect_from_env()?,
+            db: libsql_client::new_client().await?,
         })
     }
 
@@ -181,7 +181,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     tracing::info!("Listening on: {}", addr);
 
     loop {
-        // Asynchronously wait for an inbound socket.
         let (stream, addr) = listener.accept().await?;
 
         let local = tokio::task::LocalSet::new();
@@ -189,7 +188,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .run_until(async move {
                 tokio::task::spawn_local(async move {
                     tracing::info!("Accepted {}", addr);
-                    let mut smtp = SmtpServer::new(stream)?;
+                    let mut smtp = SmtpServer::new(stream).await?;
                     smtp.greet().await?;
                     smtp.serve().await
                 })
