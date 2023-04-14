@@ -173,9 +173,9 @@ impl Server {
     async fn replicate_to_db(&self, mail: Mail) -> Result<()> {
         let now = format!("{}", chrono::offset::Utc::now());
         self.db
-            .execute(Statement::with_params(
+            .execute(Statement::with_args(
                 "INSERT INTO mail VALUES (?, ?, ?, ?)",
-                libsql_client::params!(now, mail.from, mail.to.join(", "), mail.data),
+                libsql_client::args!(now, mail.from, mail.to.join(", "), mail.data),
             ))
             .await
             .map(|_| ())
