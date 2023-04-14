@@ -57,8 +57,9 @@ impl Server {
             let msg = std::str::from_utf8(&buf[0..n])?;
             let response = self.handle_smtp(msg).await?;
             if response != Server::HOLD_YOUR_HORSES {
-                tracing::debug!("Not responding, awaiting more data");
                 self.stream.write_all(response).await?;
+            } else {
+                tracing::debug!("Not responding, awaiting more data");
             }
             if response == Server::KTHXBYE {
                 break;
