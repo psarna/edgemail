@@ -1,6 +1,6 @@
 [package]
 name = "eatmail"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 keywords = ["email", "smtp", "mail", "server", "spam"]
@@ -12,7 +12,7 @@ repository = "https://github.com/psarna/eatmail"
 [dependencies]
 anyhow = "1.0.69"
 chrono = "0.4.23"
-libsql-client = "0.24"
+libsql-client = { version = "0.24", default-features = false, features = ["local_backend", "reqwest_backend"] }
 tokio = { version = "1.25.0", features = ["full"] }
 tracing = "0.1.37"
 tracing-subscriber = "0.3.16"
