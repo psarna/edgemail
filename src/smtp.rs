@@ -91,6 +91,14 @@ impl Server {
                 self.state = State::Greeted;
                 Ok(Server::KK)
             }
+            ("noop", _) | ("help", _) | ("info", _) | ("vrfy", _) | ("expn", _) => {
+                tracing::trace!("Got {command}");
+                Ok(Server::KK)
+            }
+            ("rset", _) => {
+                self.state = State::Fresh;
+                Ok(Server::KK)
+            }
             ("auth", _) => {
                 tracing::trace!("Acknowledging AUTH");
                 Ok(Server::AUTH_OK)
