@@ -149,6 +149,8 @@ impl Server {
 
     /// Runs the server loop, accepting and handling SMTP commands
     pub async fn serve(mut self) -> Result<()> {
+        self.greet().await?;
+
         let mut buf = vec![0; 65536];
         loop {
             let n = self.stream.read(&mut buf).await?;
@@ -183,7 +185,7 @@ impl Server {
     }
 
     /// Sends the initial SMTP greeting
-    pub async fn greet(&mut self) -> Result<()> {
+    async fn greet(&mut self) -> Result<()> {
         self.stream
             .write_all(StateMachine::OH_HAI)
             .await

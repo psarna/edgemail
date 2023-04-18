@@ -1,12 +1,37 @@
+use anyhow::{Context, Result};
 use tokio::net::TcpListener;
 
 use std::env;
-use std::error::Error;
 
 use eatmail::smtp;
 
+async fn clean_db(period: tokio::time::Duration) -> Result<()> {
+    let local = tokio::task::LocalSet::new();
+    local.spawn_local(async move {
+        tracing::info!("hey");
+        let db = match eatmail::database::Client::new().await {
+            Ok(db) => db,
+            Err(e) => {
+                tracing::error!("Failed to connect to database: {}", e);
+                return;
+            }
+        };
+        let mut interval = tokio::time::interval(period);
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        loop {
+            interval.tick().await;
+            tracing::debug!("Deleting old mail");
+            if let Err(e) = db.delete_old_mail().await {
+                tracing::error!("Failed to delete old mail: {}", e);
+            }
+        }
+    });
+    local.await;
+    Ok(())
+}
+
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
 
     let addr = env::args()
@@ -17,23 +42,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
     tracing::info!("Listening on: {}", addr);
 
     // Task for deleting old mail
-    tokio::task::LocalSet::new().spawn_local(async move {
-        let db = match eatmail::database::Client::new().await {
-            Ok(db) => db,
-            Err(e) => {
-                tracing::error!("Failed to connect to database: {}", e);
-                return;
-            }
-        };
-        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(3600));
-        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-        loop {
-            interval.tick().await;
-            tracing::info!("Deleting old mail");
-            if let Err(e) = db.delete_old_mail().await {
-                tracing::error!("Failed to delete old mail: {}", e);
-            }
-        }
+    std::thread::spawn(|| {
+        tokio::runtime::Builder::new_current_thread()
+            .enable_time()
+            .build()
+            .context("failed to build async runtime")?
+            .block_on(clean_db(tokio::time::Duration::from_secs(60)))
     });
 
     // Main loop: accept connections and spawn a task to handle them
@@ -43,8 +57,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
         tokio::task::LocalSet::new()
             .run_until(async move {
-                let mut smtp = smtp::Server::new(stream).await?;
-                smtp.greet().await?;
+                let smtp = smtp::Server::new(stream).await?;
                 smtp.serve().await
             })
             .await
