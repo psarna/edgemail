@@ -1,30 +1,30 @@
+use crate::database;
 use anyhow::{Context, Result};
-use libsql_client::{client::GenericClient, DatabaseClient, Statement};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Mail {
-    from: String,
-    to: Vec<String>,
-    data: String,
+    pub from: String,
+    pub to: Vec<String>,
+    pub data: String,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 enum State {
     Fresh,
     Greeted,
     ReceivingRcpt(Mail),
     ReceivingData(Mail),
+    Received(Mail),
 }
 
-/// SMTP server
-pub struct Server {
-    stream: tokio::net::TcpStream,
+struct StateMachine {
     state: State,
-    db: GenericClient,
 }
 
-impl Server {
+/// An state machine capable of handling SMTP commands
+/// for receiving mail.
+impl StateMachine {
     const OH_HAI: &[u8] = b"220 eatmail\n";
     const KK: &[u8] = b"250 Ok\n";
     const KK_PLZ_LOGIN: &[u8] = b"250-smtp.idont.date Hello idont.date\n250 AUTH PLAIN LOGIN\n";
@@ -33,51 +33,14 @@ impl Server {
     const KTHXBYE: &[u8] = b"221 Bye\n";
     const HOLD_YOUR_HORSES: &[u8] = &[];
 
-    /// Creates a new server from a connected stream
-    pub async fn new(stream: tokio::net::TcpStream) -> Result<Self> {
-        Ok(Self {
-            stream,
+    pub fn new() -> Self {
+        Self {
             state: State::Fresh,
-            db: libsql_client::new_client().await?,
-        })
-    }
-
-    /// Runs the server loop, accepting and handling SMTP commands
-    pub async fn serve(&mut self) -> Result<()> {
-        let mut buf = vec![0; 65536];
-        loop {
-            self.init_db().await?;
-            let n = self.stream.read(&mut buf).await?;
-
-            if n == 0 {
-                tracing::info!("Received EOF");
-                self.handle_smtp("quit").await.ok();
-                break;
-            }
-            let msg = std::str::from_utf8(&buf[0..n])?;
-            let response = self.handle_smtp(msg).await?;
-            if response != Server::HOLD_YOUR_HORSES {
-                self.stream.write_all(response).await?;
-            } else {
-                tracing::debug!("Not responding, awaiting more data");
-            }
-            if response == Server::KTHXBYE {
-                break;
-            }
         }
-        Ok(())
-    }
-
-    /// Sends the initial SMTP greeting
-    pub async fn greet(&mut self) -> Result<()> {
-        self.stream
-            .write_all(Server::OH_HAI)
-            .await
-            .map_err(|e| e.into())
     }
 
     /// Handles a single SMTP command
-    pub async fn handle_smtp(&mut self, raw_msg: &str) -> Result<&'static [u8]> {
+    pub fn handle_smtp(&mut self, raw_msg: &str) -> Result<&'static [u8]> {
         tracing::trace!("Received {raw_msg} in state {:?}", self.state);
         let mut msg = raw_msg.split_whitespace();
         let command = msg.next().context("received empty command")?.to_lowercase();
@@ -86,23 +49,23 @@ impl Server {
             ("ehlo", State::Fresh) => {
                 tracing::trace!("Sending AUTH info");
                 self.state = State::Greeted;
-                Ok(Server::KK_PLZ_LOGIN)
+                Ok(StateMachine::KK_PLZ_LOGIN)
             }
             ("helo", State::Fresh) => {
                 self.state = State::Greeted;
-                Ok(Server::KK)
+                Ok(StateMachine::KK)
             }
             ("noop", _) | ("help", _) | ("info", _) | ("vrfy", _) | ("expn", _) => {
                 tracing::trace!("Got {command}");
-                Ok(Server::KK)
+                Ok(StateMachine::KK)
             }
             ("rset", _) => {
                 self.state = State::Fresh;
-                Ok(Server::KK)
+                Ok(StateMachine::KK)
             }
             ("auth", _) => {
                 tracing::trace!("Acknowledging AUTH");
-                Ok(Server::AUTH_OK)
+                Ok(StateMachine::AUTH_OK)
             }
             ("mail", State::Greeted) => {
                 tracing::trace!("Receiving MAIL");
@@ -115,7 +78,7 @@ impl Server {
                     from: from.to_string(),
                     ..Default::default()
                 });
-                Ok(Server::KK)
+                Ok(StateMachine::KK)
             }
             ("rcpt", State::ReceivingRcpt(mut mail)) => {
                 tracing::trace!("Receiving rcpt");
@@ -124,12 +87,12 @@ impl Server {
                 tracing::debug!("TO: {to}");
                 mail.to.push(to.to_string());
                 self.state = State::ReceivingRcpt(mail);
-                Ok(Server::KK)
+                Ok(StateMachine::KK)
             }
             ("data", State::ReceivingRcpt(mail)) => {
                 tracing::trace!("Receiving data");
                 self.state = State::ReceivingData(mail);
-                Ok(Server::SEND_DATA_PLZ)
+                Ok(StateMachine::SEND_DATA_PLZ)
             }
             ("quit", State::ReceivingData(mail)) => {
                 tracing::trace!(
@@ -138,20 +101,19 @@ impl Server {
                     mail.to.join(", "),
                     mail.data
                 );
-                self.state = State::Fresh;
-                self.replicate_to_db(mail).await?;
-                Ok(Server::KTHXBYE)
+                self.state = State::Received(mail);
+                Ok(StateMachine::KTHXBYE)
             }
             ("quit", _) => {
                 tracing::warn!("Received quit before getting any data");
-                Ok(Server::KTHXBYE)
+                Ok(StateMachine::KTHXBYE)
             }
             (_, State::ReceivingData(mut mail)) => {
                 tracing::trace!("Receiving data");
                 let resp = if raw_msg.ends_with("\r\n.\r\n") {
-                    Server::KK
+                    StateMachine::KK
                 } else {
-                    Server::HOLD_YOUR_HORSES
+                    StateMachine::HOLD_YOUR_HORSES
                 };
                 mail.data += raw_msg;
                 self.state = State::ReceivingData(mail);
@@ -163,21 +125,100 @@ impl Server {
             ),
         }
     }
+}
 
-    /// Initializes the database
-    async fn init_db(&self) -> Result<()> {
-        self.db.execute("CREATE TABLE IF NOT EXISTS mail (date text, sender text, recipients text, data text)").await.map(|_| ())
+/// SMTP server, which handles user connections
+/// and replicates received messages to the database.
+pub struct Server {
+    stream: tokio::net::TcpStream,
+    state_machine: StateMachine,
+    db: database::Client,
+}
+
+impl Server {
+    /// Creates a new server from a connected stream
+    pub async fn new(stream: tokio::net::TcpStream) -> Result<Self> {
+        Ok(Self {
+            stream,
+            state_machine: StateMachine::new(),
+            db: database::Client::new().await?,
+        })
     }
 
-    /// Replicates received mail to the database
-    async fn replicate_to_db(&self, mail: Mail) -> Result<()> {
-        let now = format!("{}", chrono::offset::Utc::now());
-        self.db
-            .execute(Statement::with_args(
-                "INSERT INTO mail VALUES (?, ?, ?, ?)",
-                libsql_client::args!(now, mail.from, mail.to.join(", "), mail.data),
-            ))
+    /// Runs the server loop, accepting and handling SMTP commands
+    pub async fn serve(mut self) -> Result<()> {
+        let mut buf = vec![0; 65536];
+        loop {
+            let n = self.stream.read(&mut buf).await?;
+
+            if n == 0 {
+                tracing::info!("Received EOF");
+                self.state_machine.handle_smtp("quit").ok();
+                break;
+            }
+            let msg = std::str::from_utf8(&buf[0..n])?;
+            let response = self.state_machine.handle_smtp(msg)?;
+            if response != StateMachine::HOLD_YOUR_HORSES {
+                self.stream.write_all(response).await?;
+            } else {
+                tracing::debug!("Not responding, awaiting more data");
+            }
+            if response == StateMachine::KTHXBYE {
+                break;
+            }
+        }
+        match self.state_machine.state {
+            State::Received(mail) => {
+                self.db.replicate(mail).await?;
+            }
+            State::ReceivingData(mail) => {
+                tracing::info!("Received EOF before receiving QUIT");
+                self.db.replicate(mail).await?;
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    /// Sends the initial SMTP greeting
+    pub async fn greet(&mut self) -> Result<()> {
+        self.stream
+            .write_all(StateMachine::OH_HAI)
             .await
-            .map(|_| ())
+            .map_err(|e| e.into())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_regular_flow() {
+        let mut sm = StateMachine::new();
+        assert_eq!(sm.state, State::Fresh);
+        sm.handle_smtp("HELO localhost").unwrap();
+        assert_eq!(sm.state, State::Greeted);
+        sm.handle_smtp("MAIL FROM: <local@example.com>").unwrap();
+        assert!(matches!(sm.state, State::ReceivingRcpt(_)));
+        sm.handle_smtp("RCPT TO: <a@localhost.com>").unwrap();
+        assert!(matches!(sm.state, State::ReceivingRcpt(_)));
+        sm.handle_smtp("RCPT TO: <b@localhost.com>").unwrap();
+        assert!(matches!(sm.state, State::ReceivingRcpt(_)));
+        sm.handle_smtp("DATA hello world\n").unwrap();
+        assert!(matches!(sm.state, State::ReceivingData(_)));
+        sm.handle_smtp("DATA hello world2\n").unwrap();
+        assert!(matches!(sm.state, State::ReceivingData(_)));
+        sm.handle_smtp("QUIT").unwrap();
+        assert!(matches!(sm.state, State::Received(_)));
+    }
+
+    #[test]
+    fn test_no_greeting() {
+        let mut sm = StateMachine::new();
+        assert_eq!(sm.state, State::Fresh);
+        for command in ["MAIL FROM: <local@example.com>", "RCPT TO: <local@example.com>", "DATA hey", "GARBAGE"] {
+            assert!(sm.handle_smtp(command).is_err());
+        }
     }
 }

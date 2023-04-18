@@ -23,7 +23,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         local
             .run_until(async move {
                 tokio::task::spawn_local(async move {
-                    tracing::info!("Accepted {}", addr);
+                    tracing::info!("Accepted a connection from {}", addr);
                     let mut smtp = smtp::Server::new(stream).await?;
                     smtp.greet().await?;
                     smtp.serve().await

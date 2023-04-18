@@ -1,11 +1,11 @@
 import smtplib
 import sys
 
-fromaddr = "testfrom@example.com"
-toaddr  = "testto@example.com"
+from_addr = "testfrom@example.com"
+to_addr  = "testto@example.com"
 
 # Add the From: and To: headers at the start!
-msg = f"From: {fromaddr}\r\nTo: {toaddr}\r\n\r\n"
+msg = f"From: {from_addr}\r\nTo: {to_addr}\r\n\r\n"
 msg += "test \nmail\n goodbye\n"
 
 if len(sys.argv) < 3:
@@ -14,5 +14,5 @@ if len(sys.argv) < 3:
 
 server = smtplib.SMTP(sys.argv[1], port=sys.argv[2])
 server.set_debuglevel(1)
-server.sendmail(fromaddr, toaddr, msg)
+server.sendmail(from_addr, to_addr, msg)
 server.quit()
