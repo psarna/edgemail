@@ -1,6 +1,8 @@
 use crate::database;
 use anyhow::{Context, Result};
+use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::sync::Mutex;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Mail {
@@ -132,7 +134,7 @@ impl StateMachine {
 pub struct Server {
     stream: tokio::net::TcpStream,
     state_machine: StateMachine,
-    db: database::Client,
+    db: Arc<Mutex<database::Client>>,
 }
 
 impl Server {
@@ -141,7 +143,7 @@ impl Server {
         Ok(Self {
             stream,
             state_machine: StateMachine::new(),
-            db: database::Client::new().await?,
+            db: Arc::new(Mutex::new(database::Client::new().await?)),
         })
     }
 
@@ -169,11 +171,11 @@ impl Server {
         }
         match self.state_machine.state {
             State::Received(mail) => {
-                self.db.replicate(mail).await?;
+                self.db.lock().await.replicate(mail).await?;
             }
             State::ReceivingData(mail) => {
                 tracing::info!("Received EOF before receiving QUIT");
-                self.db.replicate(mail).await?;
+                self.db.lock().await.replicate(mail).await?;
             }
             _ => {}
         }
@@ -217,7 +219,12 @@ mod tests {
     fn test_no_greeting() {
         let mut sm = StateMachine::new();
         assert_eq!(sm.state, State::Fresh);
-        for command in ["MAIL FROM: <local@example.com>", "RCPT TO: <local@example.com>", "DATA hey", "GARBAGE"] {
+        for command in [
+            "MAIL FROM: <local@example.com>",
+            "RCPT TO: <local@example.com>",
+            "DATA hey",
+            "GARBAGE",
+        ] {
             assert!(sm.handle_smtp(command).is_err());
         }
     }

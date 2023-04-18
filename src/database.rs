@@ -1,5 +1,5 @@
 use crate::smtp::Mail;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use libsql_client::{client::GenericClient, DatabaseClient, Statement};
 
 pub struct Client {
@@ -42,10 +42,26 @@ impl Client {
     }
 
     /// Cleans up old mail
-    pub async fn delete_old_mail(&self) {
+    pub async fn delete_old_mail(&self) -> Result<()> {
         let now = chrono::offset::Utc::now();
         let yesterday = now - chrono::Duration::days(1);
-        let yesterday = yesterday.format("%Y-%m-%d %H:%M:%S%.3f").to_string();
+        let yesterday = &yesterday.format("%Y-%m-%d %H:%M:%S%.3f").to_string();
+        let count: i64 = i64::try_from(
+            self.db
+                .execute(Statement::with_args(
+                    "SELECT COUNT(*) FROM mail WHERE date < ?",
+                    libsql_client::args!(yesterday),
+                ))
+                .await?
+                .rows
+                .first()
+                .context("No rows returned from a COUNT(*) query")?
+                .values
+                .first()
+                .context("No values returned from a COUNT(*) query")?,
+        )
+        .map_err(|e| anyhow::anyhow!(e))?;
+        tracing::debug!("Found {count} old mail");
         self.db
             .execute(Statement::with_args(
                 "DELETE FROM mail WHERE date < ?",
@@ -53,5 +69,6 @@ impl Client {
             ))
             .await
             .ok();
+        Ok(())
     }
 }
