@@ -20,9 +20,11 @@ impl Client {
             std::env::set_var("LIBSQL_CLIENT_URL", format!("file://{db_path}"));
         }
         let db = libsql_client::new_client().await?;
-        db.execute(
+        db.batch([
             "CREATE TABLE IF NOT EXISTS mail (date text, sender text, recipients text, data text)",
-        )
+            "CREATE INDEX IF NOT EXISTS mail_date ON mail(date)",
+            "CREATE INDEX IF NOT EXISTS mail_recipients ON mail(recipients)",
+        ])
         .await?;
         Ok(Self { db })
     }
