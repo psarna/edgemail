@@ -18,6 +18,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let local = tokio::task::LocalSet::new();
 
+    // Task for deleting old mail
     local.spawn_local(async move {
         let db = match eatmail::database::Client::new().await {
             Ok(db) => db,
@@ -36,6 +37,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     });
 
+    // Main loop: accept connections and spawn a task to handle them
     loop {
         let (stream, addr) = listener.accept().await?;
         tracing::info!("Accepted a connection from {}", addr);
