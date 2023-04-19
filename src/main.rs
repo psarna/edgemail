@@ -3,13 +3,13 @@ use tokio::net::TcpListener;
 
 use std::env;
 
-use eatmail::smtp;
+use edgemail::smtp;
 
 async fn clean_db(period: tokio::time::Duration) -> Result<()> {
     let local = tokio::task::LocalSet::new();
     local.spawn_local(async move {
         tracing::info!("hey");
-        let db = match eatmail::database::Client::new().await {
+        let db = match edgemail::database::Client::new().await {
             Ok(db) => db,
             Err(e) => {
                 tracing::error!("Failed to connect to database: {}", e);

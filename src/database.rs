@@ -14,7 +14,7 @@ impl Client {
     pub async fn new() -> Result<Self> {
         if std::env::var("LIBSQL_CLIENT_URL").is_err() {
             let mut db_path = std::env::temp_dir();
-            db_path.push("eatmail.db");
+            db_path.push("edgemail.db");
             let db_path = db_path.display();
             tracing::warn!("LIBSQL_CLIENT_URL not set, using a default local database: {db_path}");
             std::env::set_var("LIBSQL_CLIENT_URL", format!("file://{db_path}"));

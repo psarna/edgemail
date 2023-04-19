@@ -1,6 +1,4 @@
-# fly.toml file generated for eatmail on 2023-03-07T09:24:52+01:00
-
-app = "eatmail"
+app = "edgemail"
 kill_signal = "SIGINT"
 kill_timeout = 5
 processes = []

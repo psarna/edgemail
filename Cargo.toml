@@ -1,11 +1,11 @@
 [package]
-name = "eatmail"
+name = "edgemail"
 version = "0.2.1"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 keywords = ["email", "smtp", "mail", "server", "spam"]
 description = "Temporary e-mail server"
-repository = "https://github.com/psarna/eatmail"
+repository = "https://github.com/psarna/edgemail"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

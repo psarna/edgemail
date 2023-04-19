@@ -27,7 +27,7 @@ struct StateMachine {
 /// An state machine capable of handling SMTP commands
 /// for receiving mail.
 impl StateMachine {
-    const OH_HAI: &[u8] = b"220 eatmail\n";
+    const OH_HAI: &[u8] = b"220 edgemail\n";
     const KK: &[u8] = b"250 Ok\n";
     const KK_PLZ_LOGIN: &[u8] = b"250-smtp.idont.date Hello idont.date\n250 AUTH PLAIN LOGIN\n";
     const AUTH_OK: &[u8] = b"235 Ok\n";
