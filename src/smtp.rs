@@ -22,27 +22,33 @@ enum State {
 
 struct StateMachine {
     state: State,
+    ehlo_greeting: String,
 }
 
 /// An state machine capable of handling SMTP commands
 /// for receiving mail.
+/// Use handle_smtp() to handle a single command.
+/// The return value from handle_smtp() is the response
+/// that should be sent back to the client.
 impl StateMachine {
     const OH_HAI: &[u8] = b"220 edgemail\n";
     const KK: &[u8] = b"250 Ok\n";
-    const KK_PLZ_LOGIN: &[u8] = b"250-smtp.idont.date Hello idont.date\n250 AUTH PLAIN LOGIN\n";
     const AUTH_OK: &[u8] = b"235 Ok\n";
     const SEND_DATA_PLZ: &[u8] = b"354 End data with <CR><LF>.<CR><LF>\n";
     const KTHXBYE: &[u8] = b"221 Bye\n";
     const HOLD_YOUR_HORSES: &[u8] = &[];
 
-    pub fn new() -> Self {
+    pub fn new(domain: impl AsRef<str>) -> Self {
+        let domain = domain.as_ref();
+        let ehlo_greeting = format!("250-{domain} Hello {domain}\n250 AUTH PLAIN LOGIN\n");
         Self {
             state: State::Fresh,
+            ehlo_greeting,
         }
     }
 
-    /// Handles a single SMTP command
-    pub fn handle_smtp(&mut self, raw_msg: &str) -> Result<&'static [u8]> {
+    /// Handles a single SMTP command and returns a proper SMTP response
+    pub fn handle_smtp(&mut self, raw_msg: &str) -> Result<&[u8]> {
         tracing::trace!("Received {raw_msg} in state {:?}", self.state);
         let mut msg = raw_msg.split_whitespace();
         let command = msg.next().context("received empty command")?.to_lowercase();
@@ -51,7 +57,7 @@ impl StateMachine {
             ("ehlo", State::Fresh) => {
                 tracing::trace!("Sending AUTH info");
                 self.state = State::Greeted;
-                Ok(StateMachine::KK_PLZ_LOGIN)
+                Ok(self.ehlo_greeting.as_bytes())
             }
             ("helo", State::Fresh) => {
                 self.state = State::Greeted;
@@ -139,10 +145,10 @@ pub struct Server {
 
 impl Server {
     /// Creates a new server from a connected stream
-    pub async fn new(stream: tokio::net::TcpStream) -> Result<Self> {
+    pub async fn new(domain: impl AsRef<str>, stream: tokio::net::TcpStream) -> Result<Self> {
         Ok(Self {
             stream,
-            state_machine: StateMachine::new(),
+            state_machine: StateMachine::new(domain),
             db: Arc::new(Mutex::new(database::Client::new().await?)),
         })
     }
@@ -199,7 +205,7 @@ mod tests {
 
     #[test]
     fn test_regular_flow() {
-        let mut sm = StateMachine::new();
+        let mut sm = StateMachine::new("dummy");
         assert_eq!(sm.state, State::Fresh);
         sm.handle_smtp("HELO localhost").unwrap();
         assert_eq!(sm.state, State::Greeted);
@@ -219,7 +225,7 @@ mod tests {
 
     #[test]
     fn test_no_greeting() {
-        let mut sm = StateMachine::new();
+        let mut sm = StateMachine::new("dummy");
         assert_eq!(sm.state, State::Fresh);
         for command in [
             "MAIL FROM: <local@example.com>",

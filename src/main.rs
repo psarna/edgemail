@@ -5,10 +5,10 @@ use std::env;
 
 use edgemail::smtp;
 
+/// A helper function for cleaning up old mail from the database
 async fn clean_db(period: tokio::time::Duration) -> Result<()> {
     let local = tokio::task::LocalSet::new();
     local.spawn_local(async move {
-        tracing::info!("hey");
         let db = match edgemail::database::Client::new().await {
             Ok(db) => db,
             Err(e) => {
@@ -20,7 +20,6 @@ async fn clean_db(period: tokio::time::Duration) -> Result<()> {
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         loop {
             interval.tick().await;
-            tracing::debug!("Deleting old mail");
             if let Err(e) = db.delete_old_mail().await {
                 tracing::error!("Failed to delete old mail: {}", e);
             }
@@ -37,6 +36,12 @@ async fn main() -> Result<()> {
     let addr = env::args()
         .nth(1)
         .unwrap_or_else(|| "0.0.0.0:2525".to_string());
+
+    let domain = &env::args()
+        .nth(2)
+        .unwrap_or_else(|| "smtp.idont.date".to_string());
+
+    tracing::info!("edgemail server for {domain} started");
 
     let listener = TcpListener::bind(&addr).await?;
     tracing::info!("Listening on: {}", addr);
@@ -57,7 +62,7 @@ async fn main() -> Result<()> {
 
         tokio::task::LocalSet::new()
             .run_until(async move {
-                let smtp = smtp::Server::new(stream).await?;
+                let smtp = smtp::Server::new(domain, stream).await?;
                 smtp.serve().await
             })
             .await
