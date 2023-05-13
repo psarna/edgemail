@@ -93,7 +93,11 @@ impl StateMachine {
                 let to = msg.next().context("received empty RCPT")?;
                 let to = to.strip_prefix("TO:").context("received incorrect RCPT")?;
                 tracing::debug!("TO: {to}");
-                mail.to.push(to.to_string());
+                if Self::legal_recipient(to) {
+                    mail.to.push(to.to_string());
+                } else {
+                    tracing::warn!("Illegal recipient: {to}")
+                }
                 self.state = State::ReceivingRcpt(mail);
                 Ok(StateMachine::KK)
             }
@@ -132,6 +136,14 @@ impl StateMachine {
                 self.state
             ),
         }
+    }
+
+    /// Filter out admin, administrator, postmaster and hostmaster
+    /// to prevent being able to register certificates for the domain.
+    /// The check is over-eager, but it also makes it simpler.
+    fn legal_recipient(to: &str) -> bool {
+        let to = to.to_lowercase();
+        !to.contains("admin") && !to.contains("postmaster") && !to.contains("hostmaster")
     }
 }
 
