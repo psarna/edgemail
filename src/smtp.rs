@@ -142,8 +142,8 @@ impl StateMachine {
     /// Filter out admin, administrator, postmaster and hostmaster
     /// to prevent being able to register certificates for the domain.
     /// The check is over-eager, but it also makes it simpler.
+    /// Assumes lowercased.
     fn legal_recipient(to: &str) -> bool {
-        let to = to.to_lowercase();
         !to.contains("admin") && !to.contains("postmaster") && !to.contains("hostmaster")
     }
 }
