@@ -56,7 +56,7 @@ async fn main() -> Result<()> {
     tracing::info!("Listening on: {}", addr);
 
     // Task for deleting old mail
-    periodically_clean_db(tokio::time::Duration::from_secs(60));
+    periodically_clean_db(tokio::time::Duration::from_secs(3600));
 
     // Main loop: accept connections and spawn a task to handle them
     loop {

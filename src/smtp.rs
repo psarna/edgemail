@@ -31,12 +31,12 @@ struct StateMachine {
 /// The return value from handle_smtp() is the response
 /// that should be sent back to the client.
 impl StateMachine {
-    const OH_HAI: &[u8] = b"220 edgemail\n";
-    const KK: &[u8] = b"250 Ok\n";
-    const AUTH_OK: &[u8] = b"235 Ok\n";
-    const SEND_DATA_PLZ: &[u8] = b"354 End data with <CR><LF>.<CR><LF>\n";
-    const KTHXBYE: &[u8] = b"221 Bye\n";
-    const HOLD_YOUR_HORSES: &[u8] = &[];
+    const OH_HAI: &'static [u8] = b"220 edgemail\n";
+    const KK: &'static [u8] = b"250 Ok\n";
+    const AUTH_OK: &'static [u8] = b"235 Ok\n";
+    const SEND_DATA_PLZ: &'static [u8] = b"354 End data with <CR><LF>.<CR><LF>\n";
+    const KTHXBYE: &'static [u8] = b"221 Bye\n";
+    const HOLD_YOUR_HORSES: &'static [u8] = &[];
 
     pub fn new(domain: impl AsRef<str>) -> Self {
         let domain = domain.as_ref();
@@ -92,9 +92,10 @@ impl StateMachine {
                 tracing::trace!("Receiving rcpt");
                 let to = msg.next().context("received empty RCPT")?;
                 let to = to.strip_prefix("TO:").context("received incorrect RCPT")?;
+                let to = to.to_lowercase();
                 tracing::debug!("TO: {to}");
-                if Self::legal_recipient(to) {
-                    mail.to.push(to.to_string());
+                if Self::legal_recipient(&to) {
+                    mail.to.push(to);
                 } else {
                     tracing::warn!("Illegal recipient: {to}")
                 }

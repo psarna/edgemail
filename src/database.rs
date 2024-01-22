@@ -48,7 +48,7 @@ impl Client {
         let now = chrono::offset::Utc::now();
         let a_week_ago = now - chrono::Duration::days(7);
         let a_week_ago = &a_week_ago.format("%Y-%m-%d %H:%M:%S%.3f").to_string();
-        tracing::debug!("Deleting old mail from before {a_week_ago}");
+        tracing::trace!("Deleting old mail from before {a_week_ago}");
 
         let count: i64 = i64::try_from(
             self.db
