@@ -66,7 +66,9 @@ async fn main() -> Result<()> {
         tokio::task::LocalSet::new()
             .run_until(async move {
                 let smtp = smtp::Server::new(domain, stream).await?;
-                smtp.serve().await
+                tokio::time::timeout(std::time::Duration::from_secs(300), smtp.serve())
+                    .await
+                    .context("connection timed out")
             })
             .await
             .ok();

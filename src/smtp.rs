@@ -170,7 +170,7 @@ impl Server {
     pub async fn serve(mut self) -> Result<()> {
         self.greet().await?;
 
-        let mut buf = vec![0; 65536];
+        let mut buf = vec![0; 1024 * 1024];
         loop {
             let n = self.stream.read(&mut buf).await?;
 
