@@ -1,9 +1,9 @@
 use crate::smtp::Mail;
 use anyhow::{Context, Result};
-use libsql_client::{client::GenericClient, DatabaseClient, Statement};
+use libsql_client::{Client as LibsqlClient, Statement};
 
 pub struct Client {
-    db: GenericClient,
+    db: LibsqlClient,
 }
 
 impl Client {
@@ -18,18 +18,23 @@ impl Client {
             let db_path = db_path.display();
             tracing::warn!("LIBSQL_CLIENT_URL not set, using a default local database: {db_path}");
             std::env::set_var("LIBSQL_CLIENT_URL", format!("file://{db_path}"));
+            
+            // For local database, create tables
+            let db = LibsqlClient::from_env().await?;
+            db.batch([
+                "CREATE TABLE IF NOT EXISTS mail (date text, sender text, recipients text, data text)",
+                "CREATE INDEX IF NOT EXISTS mail_date ON mail(date)",
+                "CREATE INDEX IF NOT EXISTS mail_recipients ON mail(recipients)",
+            ])
+            .await?;
+            Ok(Self { db })
+        } else {
+            // For remote database, assume tables already exist. Read-only use cases.
+            let db = LibsqlClient::from_env().await?;
+            Ok(Self { db })
         }
-        let db = libsql_client::new_client().await?;
-        db.batch([
-            "CREATE TABLE IF NOT EXISTS mail (date text, sender text, recipients text, data text)",
-            "CREATE INDEX IF NOT EXISTS mail_date ON mail(date)",
-            "CREATE INDEX IF NOT EXISTS mail_recipients ON mail(recipients)",
-        ])
-        .await?;
-        Ok(Self { db })
     }
 
-    /// Replicates received mail to the database
     pub async fn replicate(&self, mail: Mail) -> Result<()> {
         let now = chrono::offset::Utc::now()
             .format("%Y-%m-%d %H:%M:%S%.3f")
@@ -43,7 +48,6 @@ impl Client {
             .map(|_| ())
     }
 
-    /// Cleans up old mail
     pub async fn delete_old_mail(&self) -> Result<()> {
         let now = chrono::offset::Utc::now();
         let a_week_ago = now - chrono::Duration::days(7);
@@ -64,7 +68,7 @@ impl Client {
                 .first()
                 .context("No values returned from a COUNT(*) query")?,
         )
-        .map_err(|e| anyhow::anyhow!(e))?;
+        .map_err(|e| anyhow::anyhow!("{:?}", e))?;
         tracing::debug!("Found {count} old mail");
 
         self.db
@@ -75,5 +79,23 @@ impl Client {
             .await
             .ok();
         Ok(())
+    }
+
+    pub async fn query_mail_by_recipient(&self, recipient: &str) -> Result<Vec<Vec<libsql_client::Value>>> {
+        let stmt = Statement::with_args(
+            "SELECT date, sender, recipients, data FROM mail WHERE recipients LIKE ? ORDER BY date DESC",
+            libsql_client::args!(format!("%{}%", recipient))
+        );
+        let result = self.db.execute(stmt).await?;
+        Ok(result.rows.into_iter().map(|row| row.values).collect())
+    }
+
+    pub async fn query_mail_after_timestamp(&self, recipient: &str, timestamp: &str) -> Result<Vec<Vec<libsql_client::Value>>> {
+        let stmt = Statement::with_args(
+            "SELECT date, sender, recipients, data FROM mail WHERE recipients LIKE ? AND date >= ? ORDER BY date DESC",
+            libsql_client::args!(format!("%{}%", recipient), timestamp)
+        );
+        let result = self.db.execute(stmt).await?;
+        Ok(result.rows.into_iter().map(|row| row.values).collect())
     }
 }
