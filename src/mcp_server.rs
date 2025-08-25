@@ -68,7 +68,12 @@ impl MCPServer {
         Ok(Self { db, domain })
     }
 
-    async fn handle_request(&self, request: MCPRequest) -> MCPResponse {
+    async fn handle_request(&self, request: MCPRequest) -> Option<MCPResponse> {
+        // Handle notifications (methods starting with "notifications/") - these are ignored
+        if request.method.starts_with("notifications/") {
+            return None;
+        }
+
         let result = match request.method.as_str() {
             "initialize" => self.handle_initialize(request.params).await,
             "tools/list" => self.handle_tools_list().await,
@@ -76,7 +81,7 @@ impl MCPServer {
             _ => Err(anyhow::anyhow!("Unknown method: {}", request.method)),
         };
 
-        match result {
+        Some(match result {
             Ok(result) => MCPResponse {
                 jsonrpc: "2.0".to_string(),
                 id: request.id,
@@ -92,7 +97,7 @@ impl MCPServer {
                     message: err.to_string(),
                 }),
             },
-        }
+        })
     }
 
     async fn handle_initialize(&self, _params: Option<Value>) -> Result<Value> {
@@ -285,10 +290,11 @@ async fn main() -> Result<()> {
             Ok(0) => break,
             Ok(_) => {
                 if let Ok(request) = serde_json::from_str::<MCPRequest>(&line) {
-                    let response = server.handle_request(request).await;
-                    let response_json = serde_json::to_string(&response)?;
-                    println!("{}", response_json);
-                    io::stdout().flush()?;
+                    if let Some(response) = server.handle_request(request).await {
+                        let response_json = serde_json::to_string(&response)?;
+                        println!("{}", response_json);
+                        io::stdout().flush()?;
+                    }
                 }
             }
             Err(e) => {
