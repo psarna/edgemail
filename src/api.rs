@@ -21,7 +21,7 @@ pub struct InboxMessageSummary {
     pub date: String,
     pub recipients: Vec<String>,
     pub sender: String,
-    pub title: String,
+    pub subject: String,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -30,7 +30,7 @@ pub struct InboxMessage {
     pub date: String,
     pub recipients: Vec<String>,
     pub sender: String,
-    pub title: String,
+    pub subject: String,
     pub body: String,
 }
 
@@ -142,7 +142,7 @@ async fn list_inbox(query: &str) -> Result<String, ApiError> {
                 date: record.date,
                 recipients: split_recipients(&record.recipients),
                 sender: record.sender,
-                title: parsed.title,
+                subject: parsed.subject,
             }
         })
         .collect();
@@ -168,7 +168,7 @@ fn record_to_message(record: MailRecord) -> InboxMessage {
         date: record.date,
         recipients: split_recipients(&record.recipients),
         sender: record.sender,
-        title: parsed.title,
+        subject: parsed.subject,
         body: parsed.body,
     }
 }
@@ -184,7 +184,7 @@ fn split_recipients(recipients: &str) -> Vec<String> {
 
 #[derive(Debug, PartialEq, Eq)]
 struct ParsedMail {
-    title: String,
+    subject: String,
     body: String,
 }
 
@@ -195,7 +195,7 @@ impl ParsedMail {
             Some((headers, body)) => (headers, body),
             None => ("", normalized.as_str()),
         };
-        let title = unfolded_headers(headers)
+        let subject = unfolded_headers(headers)
             .into_iter()
             .find_map(|header| {
                 header
@@ -206,7 +206,7 @@ impl ParsedMail {
             .unwrap_or_default();
 
         Self {
-            title,
+            subject,
             body: body.to_string(),
         }
     }
@@ -344,14 +344,20 @@ mod tests {
         let parsed = ParsedMail::from_raw(
             "Subject: Test message\r\nFrom: sender@example.com\r\n\r\nHello world\r\nSecond line",
         );
-        assert_eq!(parsed.title, "Test message");
+        assert_eq!(parsed.subject, "Test message");
         assert_eq!(parsed.body, "Hello world\nSecond line");
     }
 
     #[test]
     fn unfolds_continued_subject_lines() {
         let parsed = ParsedMail::from_raw("Subject: Long\r\n subject\r\n\r\nBody");
-        assert_eq!(parsed.title, "Long subject");
+        assert_eq!(parsed.subject, "Long subject");
+    }
+
+    #[test]
+    fn returns_empty_subject_when_missing() {
+        let parsed = ParsedMail::from_raw("From: sender@example.com\r\n\r\nHello world");
+        assert_eq!(parsed.subject, "");
     }
 
     #[test]

@@ -23,7 +23,7 @@ Response:
     "date": "2026-05-17 10:00:00.000",
     "recipients": ["agent_123@smtp.idont.date"],
     "sender": "<sender@example.com>",
-    "title": "Welcome"
+    "subject": "Welcome"
   }
 ]
 ```
@@ -46,7 +46,7 @@ Response:
   "date": "2026-05-17 10:00:00.000",
   "recipients": ["agent_123@smtp.idont.date"],
   "sender": "<sender@example.com>",
-  "title": "Welcome",
+  "subject": "Welcome",
   "body": "Hello from edgemail"
 }
 ```
