@@ -1,6 +1,6 @@
 use crate::smtp::Mail;
 use anyhow::{Context, Result};
-use libsql_client::{client::GenericClient, DatabaseClient, Statement};
+use libsql_client::{client::GenericClient, DatabaseClient, Statement, Value};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MailRecord {
@@ -143,5 +143,24 @@ impl Client {
 }
 
 fn value_to_string(value: libsql_client::Value) -> String {
-    value.to_string().trim_matches('"').to_string()
+    match value {
+        Value::Null => String::new(),
+        Value::Integer { value } => value.to_string(),
+        Value::Float { value } => value.to_string(),
+        Value::Text { value } => value,
+        Value::Blob { value } => String::from_utf8_lossy(&value).into_owned(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn preserves_text_without_json_escaping() {
+        let value = Value::Text {
+            value: "Subject: Hello\r\n\r\nBody".to_string(),
+        };
+        assert_eq!(value_to_string(value), "Subject: Hello\r\n\r\nBody");
+    }
 }

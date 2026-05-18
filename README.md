@@ -13,7 +13,7 @@ In order to get it to work, run it on a machine with public IP, port `25` expose
 
 If you start `edgemail` with `--api-port <port>`, it also serves a JSON API on that port.
 
-- `GET /inbox?inbox=<email@domain>` returns a list of messages with `date`, `recipients`, `sender`, `subject`, and `id`
+- `GET /inbox?inbox=<email@domain>&page=<n>` returns `{ mail, has_more_pages }`, where `mail` contains up to 10 messages with `date`, `recipients`, `sender`, `subject`, and `id`; `page` defaults to `1`
 - `GET /inbox/<id>` returns a single message with `id`, `date`, `recipients`, `sender`, `subject`, and `body`
 - after 100 API requests have been served, later requests return `503 Service Unavailable`
 - API requests time out after 30 seconds and return `504 Gateway Timeout`

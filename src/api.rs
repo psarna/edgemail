@@ -13,6 +13,7 @@ use tokio::{
 
 const MAX_SERVED_REQUESTS: usize = 100;
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+const PAGE_SIZE: usize = 10;
 static SERVED_REQUESTS: AtomicUsize = AtomicUsize::new(0);
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -32,6 +33,12 @@ pub struct InboxMessage {
     pub sender: String,
     pub subject: String,
     pub body: String,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+pub struct InboxListResponse {
+    pub mail: Vec<InboxMessageSummary>,
+    pub has_more_pages: bool,
 }
 
 pub fn spawn(port: u16) {
@@ -131,22 +138,41 @@ async fn list_inbox(query: &str) -> Result<String, ApiError> {
         .get("inbox")
         .filter(|value| !value.is_empty())
         .ok_or_else(|| ApiError::bad_request("missing required query parameter: inbox"))?;
+    let page = match params.get("page") {
+        Some(value) => value
+            .parse::<usize>()
+            .ok()
+            .filter(|page| *page > 0)
+            .ok_or_else(|| ApiError::bad_request("page must be a positive integer"))?,
+        None => 1,
+    };
     let db = Client::new().await?;
     let rows = db.query_mail_by_recipient(inbox).await?;
-    let messages: Vec<InboxMessageSummary> = rows
-        .into_iter()
-        .map(|record| {
-            let parsed = ParsedMail::from_raw(&record.data);
-            InboxMessageSummary {
-                id: record.id,
-                date: record.date,
-                recipients: split_recipients(&record.recipients),
-                sender: record.sender,
-                subject: parsed.subject,
-            }
-        })
-        .collect();
-    serde_json::to_string(&messages).map_err(Into::into)
+    let total = rows.len();
+    let start = (page - 1) * PAGE_SIZE;
+    let end = start.saturating_add(PAGE_SIZE).min(total);
+    let messages: Vec<InboxMessageSummary> = if start >= total {
+        Vec::new()
+    } else {
+        rows[start..end]
+            .iter()
+            .map(|record| {
+                let parsed = ParsedMail::from_raw(&record.data);
+                InboxMessageSummary {
+                    id: record.id,
+                    date: record.date.clone(),
+                    recipients: split_recipients(&record.recipients),
+                    sender: record.sender.clone(),
+                    subject: parsed.subject,
+                }
+            })
+            .collect()
+    };
+    let response = InboxListResponse {
+        mail: messages,
+        has_more_pages: end < total,
+    };
+    serde_json::to_string(&response).map_err(Into::into)
 }
 
 async fn get_inbox_message(id: &str) -> Result<String, ApiError> {
@@ -365,5 +391,24 @@ mod tests {
         let params = parse_query("inbox=agent%40example.com&unused=hello+world");
         assert_eq!(params.get("inbox"), Some(&"agent@example.com".to_string()));
         assert_eq!(params.get("unused"), Some(&"hello world".to_string()));
+    }
+
+    #[test]
+    fn serializes_paginated_list_response_shape() {
+        let response = InboxListResponse {
+            mail: vec![InboxMessageSummary {
+                id: 1,
+                date: "2026-05-18 10:00:00.000".to_string(),
+                recipients: vec!["<a@idont.date>".to_string()],
+                sender: "<noreply@example.com>".to_string(),
+                subject: "Hello".to_string(),
+            }],
+            has_more_pages: true,
+        };
+        let json = serde_json::to_string(&response).unwrap();
+        assert_eq!(
+            json,
+            "{\"mail\":[{\"id\":1,\"date\":\"2026-05-18 10:00:00.000\",\"recipients\":[\"<a@idont.date>\"],\"sender\":\"<noreply@example.com>\",\"subject\":\"Hello\"}],\"has_more_pages\":true}"
+        );
     }
 }
